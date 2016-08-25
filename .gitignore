@@ -1,0 +1,8 @@
+*.DS_Store
+Data/*.txt
+Data/*.model
+Data/Test/*.wav
+Data/Test/*.txt
+Data/Train/*.wav
+Data/Train/*.txt
+
