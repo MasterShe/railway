@@ -46,7 +46,7 @@ def main():
 		exit(1)
 	max = 0
 	audio_char_pitches = []
-	answers = [line.rstrip('\n') for line in open('Data/%s/answer.txt' % sys.argv[1])]
+	answers = [line.rstrip('\n') for line in open('Data/%s/answers.txt' % sys.argv[1])]
 
 	for i in range(len(answers)):
 		filename = 'Data/%s/%d.wav' % (sys.argv[1] ,i)

@@ -20,6 +20,7 @@
 	cp libsvm.so.2 ../railway/
 	vim ../railway/svm.py
 	:%s, ../libsvm.so.2, ibsvm.so.2
+	:wq
 -------------
 
 ## 使用方法
