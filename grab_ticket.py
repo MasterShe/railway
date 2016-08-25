@@ -34,7 +34,7 @@ def read_arguments():
 
 def get_pitches(filename):
 	pitches = []
-	s = source(filename, 8000, HOP_SIZE)
+	s = source(filename, SIMPLE_RATE, HOP_SIZE)
 	p = pitch(PITCH_METHOD, FRAME_SIZE, HOP_SIZE, SIMPLE_RATE)
 	while True:
 	    samples, read = s()

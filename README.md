@@ -19,7 +19,7 @@
 	cp python/*.py ../railway/
 	cp libsvm.so.2 ../railway/
 	vim ../railway/svm.py
-	:%s, ../libsvm.so.2, ibsvm.so.2
+	:%s,../libsvm.so.2,libsvm.so.2
 	:wq
 -------------
 
