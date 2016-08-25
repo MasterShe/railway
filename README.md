@@ -53,13 +53,13 @@
 
 -------------
 
-### train_data.py
+### train_feature.py
 
 #### 透過 Data/Train/Train_features.txt 訓練出 svm_model 並儲存為 Data/svm.model
 
 -------------
 
-### test_data.py
+### test_feature.py
 
 #### 載入 Data/svm.model 並對 Data/Test/Test_features.txt 進行測試並輸出辨識率
 
