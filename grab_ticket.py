@@ -32,6 +32,17 @@ def read_arguments():
 		return int(sys.argv[1])
 	return 1
 
+def rand_user_agent():
+	user_agents = [
+		'Mozilla/5.0 (compatible; MSIE 10.0; Macintosh; Intel Mac OS X 10_7_3; Trident/6.0)',
+		'Mozilla/5.0 (compatible; MSIE 8.0; Windows NT 6.1; Trident/4.0; GTB7.4; InfoPath.2; SV1; .NET CLR 3.3.69573; WOW64; en-US)',
+		'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.2 (KHTML, like Gecko) Chrome/22.0.1216.0 Safari/537.2',
+		'Mozilla/5.0 (X11; CrOS i686 2268.111.0) AppleWebKit/536.11 (KHTML, like Gecko) Chrome/20.0.1132.57 Safari/536.11',
+		'Mozilla/5.0 (iPad; CPU OS 6_0 like Mac OS X) AppleWebKit/536.26 (KHTML, like Gecko) Version/6.0 Mobile/10A5355d Safari/8536.25',
+		'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_6_8) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.45 Safari/535.19'
+	]
+	return random.choice(user_agents)
+
 def get_pitches(filename):
 	pitches = []
 	s = source(filename, SIMPLE_RATE, HOP_SIZE)
@@ -117,7 +128,7 @@ def input_params():
 	if not re.match('^(19|20)[0-9]{2}\/(0[0-9]|1[0-2])\/([0-2][0-9]|3[0-1])$', params['getin_date']):
 		print '乘車日期格式錯誤.'
 		return None
-	diff_days = abs(datetime.now() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d')).days
+	diff_days = abs(datetime.now().date() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d').date()).days
 	params['getin_date'] = '%s-%d' % (params['getin_date'][:10], diff_days)
 	
 	# train_no
@@ -161,34 +172,36 @@ def input_params():
 	params['order_qty_str'] = str(total)
 	return params
 
-def save_data(opener, url, output):
-	headers = {'referer': INIT_URL};
+def save_data(opener, headers, url, output):
+	headers['referer'] = INIT_URL
 	data = opener.open(urllib2.Request(url, None, headers)).read()
 	if len(output) > 0:
 		f = open(output, 'wb')
 		f.write(data)
 
 def init_session(opener, params):
-	headers = {'referer': CTNO_HTM_URL};
+	global ORDER_URL
+	headers = {'referer': CTNO_HTM_URL, 'User-Agent': rand_user_agent()}
 	resp = opener.open(urllib2.Request(INIT_URL, urllib.urlencode(params), headers)).read()
 	resp = resp.decode('big5').encode('utf-8')
 	params = {}
 	new_params = re.findall('input name="([^"]+)[^v]+value="([^"]+)', resp)
 	for i in range(len(new_params)):
 		params[new_params[i][0]] = new_params[i][1]
-	diff_days = abs(datetime.now() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d')).days
+	diff_days = abs(datetime.now().date() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d').date()).days
 	params['getin_date'] = '%s-%d' % (params['getin_date'][:10], diff_days)
-	return params
+	ORDER_URL = 'http://railway.hinet.net/%s.jsp'% re.search('action="([^.]+)', resp).group(1)
+	return params, headers
 
-def buy_ticket(opener, params, lock, thread_id):
+def buy_ticket(opener, params, headers, lock, thread_id):
 	rand = random.random()
 	stamp = int(time.time() * 1000)
-	save_data(opener, IMAGE_URL % rand, '')
-	save_data(opener, AUDIO_URL % rand, 'Temp/%d_%d.wav' % (thread_id, stamp))
+	save_data(opener, headers, IMAGE_URL % rand, '')
+	save_data(opener, headers, AUDIO_URL % rand, 'Temp/%d_%d.wav' % (thread_id, stamp))
 	params['randInput'] = char_pitches_to_string(split_pitches(get_pitches('Temp/%d_%d.wav' % (thread_id, stamp))))
 	os.remove('Temp/%d_%d.wav' % (thread_id, stamp))
 	# print params['randInput']
-	headers = {'referer': INIT_URL};
+	headers['referer'] = INIT_URL;
 	resp = opener.open(urllib2.Request('%s?%s' % (ORDER_URL, urllib.urlencode(params)), None, headers)).read()
 	resp = resp.decode('big5').encode('utf-8')
 	message = re.search('spanOrderCode[^>]+>([0-9]+)', resp)
@@ -202,12 +215,12 @@ def buy_ticket(opener, params, lock, thread_id):
 		lock.acquire()
 		if resp.find('對不起，車票已訂完') != -1:
 			print '%d: 對不起，車票已訂完, 重試中 ...' % thread_id
-		else:	
+		else:
 			print '%d: 發生其餘未知的錯誤(EX:購票超過6張) ...' % thread_id
 		lock.release()
 		return False
 	lock.acquire()
-	print '%d: %s, 重試中 ...' % (thread_id, message.group(1))
+	print '%d: %s 重試中 ...' % (thread_id, message.group(1))
 	lock.release()
 	return False
 
@@ -215,10 +228,10 @@ def grab_ticket(params, lock, thread_id):
 	global stop
 	cj = CookieJar()
 	opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
-	buy_params = init_session(opener, params)
+	buy_params, headers = init_session(opener, params)
 	# from datetime import date
-	while buy_ticket(opener, buy_params, lock, thread_id) == False and stop == False:
-		diff_days = abs(datetime.now() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d')).days
+	while buy_ticket(opener, buy_params, headers, lock, thread_id) == False and stop == False:
+		diff_days = abs(datetime.now().date() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d').date()).days
 		params['getin_date'] = '%s-%d' % (params['getin_date'][:10], diff_days)
 
 	stop = True
