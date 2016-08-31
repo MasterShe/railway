@@ -29,8 +29,10 @@ ORDER_URL = 'http://railway.hinet.net/order_no1.jsp'
 
 def read_arguments():
 	if len(sys.argv) == 2:
-		return int(sys.argv[1])
-	return 1
+		return int(sys.argv[1]), True
+	elif len(sys.argv) == 3:
+		return int(sys.argv[1]), int(sys.argv[2]) == 1
+	return 1, True
 
 def rand_user_agent():
 	user_agents = [
@@ -130,7 +132,6 @@ def input_params():
 		return None
 	diff_days = abs(datetime.now().date() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d').date()).days
 	params['getin_date'] = '%s-%d' % (params['getin_date'][:10], diff_days)
-	
 	# train_no
 	params['train_no'] = raw_input('請輸入車次代碼: ')
 	if not re.match('[0-9]+', params['train_no']):
@@ -184,13 +185,17 @@ def init_session(opener, params):
 	headers = {'referer': CTNO_HTM_URL, 'User-Agent': rand_user_agent()}
 	resp = opener.open(urllib2.Request(INIT_URL, urllib.urlencode(params), headers)).read()
 	resp = resp.decode('big5').encode('utf-8')
-	params = {}
+	tmp_params = params
 	new_params = re.findall('input name="([^"]+)[^v]+value="([^"]+)', resp)
 	for i in range(len(new_params)):
 		params[new_params[i][0]] = new_params[i][1]
+	if not 'getin_date' in params:
+		ORDER_URL = 'http://railway.hinet.net/%s.jsp'% re.search('action="([^.]+)', resp).group(1)
+		return tmp_params, headers
 	diff_days = abs(datetime.now().date() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d').date()).days
 	params['getin_date'] = '%s-%d' % (params['getin_date'][:10], diff_days)
 	ORDER_URL = 'http://railway.hinet.net/%s.jsp'% re.search('action="([^.]+)', resp).group(1)
+	print ORDER_URL
 	return params, headers
 
 def buy_ticket(opener, params, headers, lock, thread_id):
@@ -224,22 +229,34 @@ def buy_ticket(opener, params, headers, lock, thread_id):
 	lock.release()
 	return False
 
-def grab_ticket(params, lock, thread_id):
+def grab_ticket(params, wait, lock, thread_id):
 	global stop
 	cj = CookieJar()
 	opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 	buy_params, headers = init_session(opener, params)
-	# from datetime import date
-	while buy_ticket(opener, buy_params, headers, lock, thread_id) == False and stop == False:
-		diff_days = abs(datetime.now().date() - datetime.strptime(params['getin_date'][:10], '%Y/%m/%d').date()).days
-		params['getin_date'] = '%s-%d' % (params['getin_date'][:10], diff_days)
-
+	while stop == False and buy_params == None:
+		cj.clear()
+		buy_params, headers = init_session(opener, params)
+	# wait
+	wait_time = (23 * 60 + 30) * 60 + 45
+	while stop == False and wait == True:
+		now_time = datetime.now()
+		current_time = (now_time.hour * 60 + now_time.minute) * 60 + now_time.second
+		if current_time >= wait_time:
+			cj.clear()
+			buy_params, headers = init_session(opener, params)
+			break
+	# start
+	while stop == False and buy_ticket(opener, buy_params, headers, lock, thread_id) == False:
+		diff_days = abs(datetime.now().date() - datetime.strptime(buy_params['getin_date'][:10], '%Y/%m/%d').date()).days
+		buy_params['getin_date'] = '%s-%d' % (buy_params['getin_date'][:10], diff_days)
+		time.sleep(3)
 	stop = True
 	thread.exit()
 
 def main():
 	global model, stop
-	thread_count = read_arguments()
+	thread_count, wait = read_arguments()
 	model = svm_load_model('Data/svm.model')
 	df_params = input_params()
 	print
@@ -247,7 +264,7 @@ def main():
 	threads = []
 	lock = thread.allocate_lock()
 	for i in range(thread_count):
-		threads.append(Thread(target = grab_ticket, args = (df_params, lock, i + 1,)))
+		threads.append(Thread(target = grab_ticket, args = (df_params, wait, lock, i + 1,)))
 		threads[i].start()
 	try:
 		while True:
